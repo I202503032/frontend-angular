@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "newProjectRoot": "projects",
+  "projects": {
+    "angular-mibodeguita": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {"outputPath": "dist/angular-mibodeguita", "index": "src/index.html", "browser": "src/main.ts", "polyfills": ["zone.js"], "tsConfig": "tsconfig.app.json", "styles": ["src/styles.css"]},
+          "configurations": {"production": {"optimization": true, "outputHashing": "all"}, "development": {"optimization": false, "extractLicenses": false, "sourceMap": true}},
+          "defaultConfiguration": "production"
+        },
+        "serve": {"builder": "@angular/build:dev-server", "configurations": {"production": {"buildTarget": "angular-mibodeguita:build:production"}, "development": {"buildTarget": "angular-mibodeguita:build:development"}}, "defaultConfiguration": "development"}
+      }
+    }
+  }
+}
