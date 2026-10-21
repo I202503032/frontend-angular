@@ -53,9 +53,9 @@ export class AppComponent implements OnInit {
   private http = inject(HttpClient);
 
   // ⚙️ URLs de los Microservicios distribuidos
-  private readonly apiSecurity = 'http://localhost:8081/api';
-  private readonly apiInventory = 'http://localhost:8082/api';
-  private readonly apiMovement = 'http://localhost:8083/api';
+  private readonly apiSecurity = 'http://localhost:8070/api';
+  private readonly apiInventory = 'http://localhost:8070/api';
+  private readonly apiMovement = 'http://localhost:8070/api';
 
   usuario: Usuario | null = null;
   productos: Producto[] = [];
