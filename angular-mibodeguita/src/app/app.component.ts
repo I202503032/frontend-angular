@@ -21,6 +21,33 @@ type ProductoPayload = { nombre: string; descripcion: string; imagen: string; pr
     </section>
     <ng-container *ngIf="usuario">
       <section class="welcome"><div><h2>Hola, {{ usuario.nombre }}</h2><p class="muted">Sesión iniciada como {{ usuario.tipo }} · {{ usuario.email }}</p></div><button class="secondary" (click)="cerrarSesion()">Cerrar sesión</button></section>
+<section class="dashboard" aria-label="Indicadores del inventario">
+  <article class="metric-card">
+    <div class="metric-icon metric-green">PR</div>
+    <div>
+      <p class="metric-label">Productos registrados</p>
+      <p class="metric-value">{{ productos.length }}</p>
+      <p class="metric-detail">Productos en el inventario</p>
+    </div>
+  </article>
+  <article class="metric-card">
+    <div class="metric-icon metric-blue">UN</div>
+    <div>
+      <p class="metric-label">Unidades disponibles</p>
+      <p class="metric-value">{{ totalUnidades }}</p>
+      <p class="metric-detail">Unidades en existencia</p>
+    </div>
+  </article>
+  <article class="metric-card" [class.metric-warning]="totalProductosCriticos > 0">
+    <div class="metric-icon metric-orange">!</div>
+    <div>
+      <p class="metric-label">Stock crítico</p>
+      <p class="metric-value">{{ totalProductosCriticos }}</p>
+      <p class="metric-detail">Productos con menos de {{ stockMinimo }} unidades</p>
+    </div>
+  </article>
+</section>
+
       <section class="panel"><h2>{{ editandoId ? 'Editar producto' : 'Registrar producto' }}</h2>
         <form (ngSubmit)="guardarProducto()" class="form-grid product-form">
           <label>Nombre<input name="nombre" [(ngModel)]="form.nombre" required maxlength="120"></label>
@@ -32,8 +59,25 @@ type ProductoPayload = { nombre: string; descripcion: string; imagen: string; pr
         </form>
       </section>
       <section class="panel"><div class="list-heading"><div><h2>Inventario</h2><p class="muted">{{ productos.length }} producto(s) registrados</p></div><button class="secondary" (click)="cargarProductos()">Actualizar lista</button></div>
+        <div class="stock-alert" *ngIf="productosCriticos.length > 0">
+        <strong>⚠️ ¡Alerta de stock crítico!</strong>
+        <p>
+         Hay {{ productosCriticos.length }} producto(s) con menos de
+        {{ stockMinimo }} unidades. Revisa el inventario y realiza el
+        reabastecimiento necesario.
+        </p>
+        </div>
         <div class="table-wrap"><table><thead><tr><th>Producto</th><th>Precio</th><th>Stock</th><th>Descripción</th><th>Acciones</th></tr></thead><tbody>
-          <tr *ngFor="let p of productos"><td><strong>{{ p.nombre }}</strong><small>#{{ p.id }}</small></td><td>S/ {{ p.precio | number:'1.2-2' }}</td><td><span class="stock" [class.low-stock]="p.cantidad < 5">{{ p.cantidad }}</span></td><td>{{ p.descripcion || '—' }}</td><td class="row-actions"><button class="small secondary" (click)="editar(p)">Editar</button><button class="small danger" (click)="eliminar(p)">Eliminar</button><button class="small info" (click)="abrirMovimiento(p)">Movimientos</button></td></tr>
+          <tr *ngFor="let p of productos"><td><strong>{{ p.nombre }}</strong><small>#{{ p.id }}</small></td><td>S/ {{ p.precio | number:'1.2-2' }}</td>
+          <td>
+        <span class="stock" [class.low-stock]="p.cantidad < stockMinimo">
+         {{ p.cantidad }}
+        </span>
+        <span class="critical-label" *ngIf="p.cantidad < stockMinimo">
+          ⚠ Stock crítico
+        </span>
+           </td>
+          <td>{{ p.descripcion || '—' }}</td><td class="row-actions"><button class="small secondary" (click)="editar(p)">Editar</button><button class="small danger" (click)="eliminar(p)">Eliminar</button><button class="small info" (click)="abrirMovimiento(p)">Movimientos</button></td></tr>
           <tr *ngIf="productos.length === 0"><td colspan="5" class="empty">Todavía no hay productos registrados.</td></tr>
         </tbody></table></div>
         
@@ -59,6 +103,21 @@ export class AppComponent implements OnInit {
 
   usuario: Usuario | null = null;
   productos: Producto[] = [];
+  readonly stockMinimo = 5;
+  get productosCriticos(): Producto[] {
+    return this.productos.filter(
+        producto => producto.cantidad < this.stockMinimo
+    );
+  }
+  get totalUnidades(): number {
+    return this.productos.reduce(
+        (total, producto) => total + (Number(producto.cantidad) || 0),
+        0
+    );
+  }
+  get totalProductosCriticos(): number {
+    return this.productosCriticos.length;
+  }
   email = ''; password = '';
   cargando = false; mensaje = ''; esError = false; editandoId: number | null = null;
   form: ProductoPayload = this.formularioVacio();
@@ -92,9 +151,8 @@ export class AppComponent implements OnInit {
       ...this.form,
       nombre: this.form.nombre.trim(),
       usuarioId: this.usuario?.id ?? null,
-      stockMinimo: 5 // 👈 AGREGA ESTA LÍNEA AQUÍ
+      stockMinimo: 5
     };
-
     try {
       if (this.editandoId) {
         await firstValueFrom(this.http.put<Producto>(`${this.apiInventory}/productos/${this.editandoId}`, payload));
