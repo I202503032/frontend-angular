@@ -4,7 +4,8 @@ import { Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 
-type Usuario = { id: number; nombre: string; email: string; rol: string };
+type Usuario = { id: number; nombre: string; email: string; rol: string; username?: string | null; telefono?: string | null; direccion?: string | null };
+type NuevoUsuario = { nombre: string; username: string; email: string; password: string; telefono: string; direccion: string; rol: string };
 type LoginResponse = { token: string; id: number; rol: string };
 type Producto = { id: number; nombre: string; descripcion: string; imagen: string; precio: number; cantidad: number; stockMinimo: number | null; usuarioId: number | null };
 type ProductoPayload = { nombre: string; descripcion: string; imagen: string; precio: number; cantidad: number; stockMinimo: number; usuarioId: number | null };
@@ -88,6 +89,24 @@ type ProductoPayload = { nombre: string; descripcion: string; imagen: string; pr
           <button type="button" class="btn btn-dark ms-2" (click)="exportarA_CSV()">📋 Exportar a CSV</button>
         </div>
       </section>
+      <section class="panel" *ngIf="esAdmin"><div class="list-heading"><div><h2>Usuarios</h2><p class="muted">{{ usuarios.length }} usuario(s) registrados</p></div><button class="secondary" (click)="cargarUsuarios()">Actualizar lista</button></div>
+        <form (ngSubmit)="crearUsuario()" class="form-grid" #formUsuario="ngForm">
+          <label>Nombre<input name="usuarioNombre" [(ngModel)]="nuevoUsuario.nombre" required maxlength="120"></label>
+          <label>Correo electrónico<input name="usuarioEmail" type="email" [(ngModel)]="nuevoUsuario.email" required email></label>
+          <label>Contraseña<input name="usuarioPassword" type="password" [(ngModel)]="nuevoUsuario.password" required minlength="6" placeholder="Mínimo 6 caracteres"></label>
+          <label>Rol<select name="usuarioRol" [(ngModel)]="nuevoUsuario.rol"><option value="USER">USER</option><option value="ADMIN">ADMIN</option></select></label>
+          <label>Usuario<input name="usuarioUsername" [(ngModel)]="nuevoUsuario.username"></label>
+          <label>Teléfono<input name="usuarioTelefono" [(ngModel)]="nuevoUsuario.telefono"></label>
+          <label class="wide">Dirección<input name="usuarioDireccion" [(ngModel)]="nuevoUsuario.direccion"></label>
+          <div class="actions wide"><button type="submit" [disabled]="cargando || formUsuario.invalid">Crear usuario</button></div>
+        </form>
+        <div class="table-wrap users-table"><table><thead><tr><th>Usuario</th><th>Correo</th><th>Teléfono</th><th>Rol</th><th>Acciones</th></tr></thead><tbody>
+          <tr *ngFor="let u of usuarios"><td><strong>{{ u.nombre }}</strong><small>#{{ u.id }}{{ u.username ? ' · ' + u.username : '' }}</small></td><td>{{ u.email }}</td><td>{{ u.telefono || '—' }}</td>
+          <td><span class="rol-badge" [class.rol-admin]="u.rol === 'ADMIN'">{{ u.rol }}</span></td>
+          <td class="row-actions"><button class="small secondary" *ngIf="u.id !== usuario.id" (click)="cambiarRol(u)">{{ u.rol === 'ADMIN' ? 'Cambiar a USER' : 'Cambiar a ADMIN' }}</button><small *ngIf="u.id === usuario.id">Tu cuenta</small></td></tr>
+          <tr *ngIf="usuarios.length === 0"><td colspan="5" class="empty">No hay usuarios para mostrar.</td></tr>
+        </tbody></table></div>
+      </section>
     </ng-container>
     <p class="notice" *ngIf="mensaje" [class.error]="esError">{{ mensaje }}</p>
     <footer>MiBodeguita · Aplicación académica de gestión de bodegas</footer>
@@ -103,6 +122,8 @@ export class AppComponent implements OnInit {
 
   usuario: Usuario | null = null;
   productos: Producto[] = [];
+  usuarios: Usuario[] = [];
+  nuevoUsuario: NuevoUsuario = this.usuarioVacio();
   readonly stockMinimo = 5;
   get esAdmin(): boolean {
     return this.usuario?.rol === 'ADMIN';
@@ -131,8 +152,10 @@ export class AppComponent implements OnInit {
   ngOnInit(): void {
     const guardado = sessionStorage.getItem('mibodeguita.usuario');
     const token = sessionStorage.getItem('mibodeguita.token');
-    if (guardado && token) { try { this.usuario = JSON.parse(guardado) as Usuario; void this.cargarProductos(); } catch { this.borrarSesion(); } }
+    if (guardado && token) { try { this.usuario = JSON.parse(guardado) as Usuario; void this.cargarProductos(); void this.cargarUsuarios(); } catch { this.borrarSesion(); } }
   }
+
+  private usuarioVacio(): NuevoUsuario { return { nombre: '', username: '', email: '', password: '', telefono: '', direccion: '', rol: 'USER' }; }
 
   private formularioVacio(): ProductoPayload { return { nombre: '', descripcion: '', imagen: 'default.jpg', precio: 0.01, cantidad: 0, stockMinimo: this.stockMinimo, usuarioId: null }; }
 
@@ -143,13 +166,13 @@ export class AppComponent implements OnInit {
       sessionStorage.setItem('mibodeguita.token', respuesta.token);
       this.usuario = await firstValueFrom(this.http.get<Usuario>(`${this.apiSecurity}/auth/me`));
       sessionStorage.setItem('mibodeguita.usuario', JSON.stringify(this.usuario));
-      this.password = ''; this.mensaje = 'Sesión iniciada correctamente.'; await this.cargarProductos();
+      this.password = ''; this.mensaje = 'Sesión iniciada correctamente.'; await this.cargarProductos(); await this.cargarUsuarios();
     }
     catch (e) { this.borrarSesion(); this.mostrarError(e, 'No se pudo iniciar sesión. Verifica tus credenciales y que el backend esté activo.'); }
     finally { this.cargando = false; }
   }
 
-  cerrarSesion(): void { this.usuario = null; this.productos = []; this.borrarSesion(); this.limpiarFormulario(); this.mensaje = 'Sesión cerrada.'; this.esError = false; }
+  cerrarSesion(): void { this.usuario = null; this.productos = []; this.usuarios = []; this.nuevoUsuario = this.usuarioVacio(); this.borrarSesion(); this.limpiarFormulario(); this.mensaje = 'Sesión cerrada.'; this.esError = false; }
 
   private borrarSesion(): void { sessionStorage.removeItem('mibodeguita.usuario'); sessionStorage.removeItem('mibodeguita.token'); }
 
@@ -221,6 +244,53 @@ export class AppComponent implements OnInit {
       this.mostrarError(e, 'Error al registrar el movimiento.');
     }
   }
+  async cargarUsuarios(): Promise<void> {
+    if (!this.esAdmin) return;
+    try { this.usuarios = await firstValueFrom(this.http.get<Usuario[]>(`${this.apiSecurity}/usuarios`)); }
+    catch (e) { this.mostrarError(e, 'No se pudo cargar la lista de usuarios.'); }
+  }
+
+  async crearUsuario(): Promise<void> {
+    this.limpiarMensaje(); this.cargando = true;
+    const { rol, ...datos } = this.nuevoUsuario;
+    const payload = {
+      nombre: datos.nombre.trim(),
+      email: datos.email.trim(),
+      password: datos.password,
+      username: datos.username.trim() || null,
+      telefono: datos.telefono.trim() || null,
+      direccion: datos.direccion.trim() || null
+    };
+    try {
+      const creado = await firstValueFrom(this.http.post<Usuario>(`${this.apiSecurity}/auth/register`, payload));
+      if (rol === 'ADMIN') {
+        await firstValueFrom(this.http.put<Usuario>(`${this.apiSecurity}/usuarios/${creado.id}/rol`, null, { params: { rol } }));
+      }
+      this.mensaje = `Usuario ${creado.email} creado como ${rol}.`;
+      this.esError = false;
+      this.nuevoUsuario = this.usuarioVacio();
+      await this.cargarUsuarios();
+    } catch (e) {
+      this.mostrarError(e, 'No se pudo crear el usuario. Revisa los campos.');
+    } finally {
+      this.cargando = false;
+    }
+  }
+
+  async cambiarRol(u: Usuario): Promise<void> {
+    const nuevoRol = u.rol === 'ADMIN' ? 'USER' : 'ADMIN';
+    if (!confirm(`¿Cambiar el rol de "${u.nombre}" a ${nuevoRol}?`)) return;
+    this.limpiarMensaje();
+    try {
+      await firstValueFrom(this.http.put<Usuario>(`${this.apiSecurity}/usuarios/${u.id}/rol`, null, { params: { rol: nuevoRol } }));
+      this.mensaje = `Rol de ${u.nombre} actualizado a ${nuevoRol}. El cambio aplica en su próximo inicio de sesión.`;
+      this.esError = false;
+      await this.cargarUsuarios();
+    } catch (e) {
+      this.mostrarError(e, 'No se pudo cambiar el rol.');
+    }
+  }
+
   async exportarA_Excel(): Promise<void> {
     try {
       const blob = await firstValueFrom(this.http.get(`${this.apiMovement}/reportes/exportar`, { responseType: 'blob' }));
